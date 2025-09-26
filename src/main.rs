@@ -11,10 +11,23 @@ use rumqttc::tokio_rustls::rustls::rustls_fido::enums::FidoMode;
 use rumqttc::tokio_rustls::rustls::rustls_fido::client::FidoClient;
 use rustls_pemfile::certs;
 
+macro_rules! env_var_or_default {
+    ($name:expr, $default:expr) => {
+        std::env::var($name).unwrap_or_else(|_| $default.to_string())
+    };
+}
+
 #[tokio::main]
 async fn main() {
-    env_logger::init();
-    let cert_file = File::open("./tls-certs/ca.cert.pem").expect("cannot open cert file");
+    // Read environment variables
+    let ca_cert_path = env_var_or_default!("CA_CERT_PATH", "./tls-certs/ca.cert.pem");
+    let client_cert_path = env_var_or_default!("CLIENT_CERT_PATH", "./tls-certs/client.cert.pem");
+    let client_key_path = env_var_or_default!("CLIENT_KEY_PATH", "./tls-certs/client.key.pem");
+    let host = env_var_or_default!("SERVER_HOST", "localhost");
+    let port = env_var_or_default!("SERVER_PORT", "1883").parse().unwrap();
+    let fido_pin = env_var_or_default!("FIDO_DEVICE_PIN", "1234");
+
+    let cert_file = File::open(ca_cert_path).expect("cannot open cert file");
     let mut reader = BufReader::new(cert_file);
 
     // Parse the certificate(s)
@@ -30,18 +43,18 @@ async fn main() {
             .expect("failed to add cert to root store");
     }
 
-    let client_cert = CertificateDer::pem_file_iter("./tls-certs/client.cert.pem")
+    let client_cert = CertificateDer::pem_file_iter(client_cert_path)
         .unwrap()
         .map(Result::unwrap)
         .collect();
-    let client_key = PrivateKeyDer::from_pem_file("./tls-certs/client.key.pem").unwrap();
+    let client_key = PrivateKeyDer::from_pem_file(client_key_path).unwrap();
     
     let fido = FidoClient::new(
         FidoMode::Authentication,
         None,
         None,
         None,
-        "1234".to_string()
+        fido_pin
     );
 
     let config = ClientConfig::builder()
@@ -52,7 +65,7 @@ async fn main() {
     let tls_config = TlsConfiguration::Rustls(Arc::new(config));
     let transport = Transport::tls_with_config(tls_config);
 
-    let mut mqttoptions = MqttOptions::new("rumqtt-async", "localhost", 1883);
+    let mut mqttoptions = MqttOptions::new("rumqtt-async", host, port);
     mqttoptions.set_transport(transport);
     mqttoptions.set_keep_alive(Duration::from_secs(5));
 
