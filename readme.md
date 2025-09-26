@@ -38,6 +38,7 @@ cargo run --features build-binary --bin register
 
 cd ..
 cd rumqtt
+cargo build --package rumqttd --bin rumqttd --config rumqttd/rumqttd.toml
 cargo run --package rumqttd --bin rumqttd --config rumqttd/rumqttd.toml &
 
 cd ..
